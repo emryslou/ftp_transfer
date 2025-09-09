@@ -1,0 +1,48 @@
+# FTP服务器配置文件示例
+# 复制此文件为ftp_config.yaml并修改为实际配置
+# 注意：archive_directory已不再需要配置，程序会自动生成
+
+# 源FTP服务器信息
+source:
+  host: "source.ftp.example.com"
+  port: 21  # FTP端口，默认21
+  user: "source_user"
+  password: "source_password"
+  directory: "/source/directory"
+  backup_directory: "/source/backup"  # 处理完成后文件备份目录（可选）
+  use_ftps: false  # 是否使用FTPS加密连接
+  tls_implicit: false  # 是否使用隐式TLS（通常使用端口990）
+  use_passive: true  # 是否使用被动模式
+
+
+# 目标FTP服务器信息
+destination:
+  host: "dest.ftp.example.com"
+  port: 21  # FTP端口，默认21
+  user: "dest_user"
+  password: "dest_password"
+  directory: "/destination/directory"
+  use_ftps: false  # 是否使用FTPS加密连接
+  tls_implicit: false  # 是否使用隐式TLS（通常使用端口990）
+
+
+# 日志配置
+log:
+  file: "ftp_transfer.log"  # 日志文件路径
+  rotation: "1 week"        # 日志轮转策略
+  retention: "1 month"      # 日志保留时间
+  level: "INFO"             # 日志级别
+
+# 邮件通知配置
+email:
+  enable: false                      # 是否启用邮件通知
+  subject: "FTP文件传输任务报告"     # 邮件主题
+  sender: "notifications@example.com"  # 发送者邮箱
+  recipients:                       # 接收者邮箱列表
+    - "recipient1@example.com"
+    - "recipient2@example.com"
+  smtp_server: "smtp.example.com"   # SMTP服务器地址
+  smtp_port: 587                    # SMTP服务器端口
+  smtp_username: "your_email@example.com"  # SMTP用户名
+  smtp_password: "your_password"    # SMTP密码或授权码
+  failure_threshold: 3              # 失败文件数量阈值，超过此值发送警告邮件

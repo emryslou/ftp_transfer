@@ -1,0 +1,42 @@
+# FTP服务器配置文件示例
+# 复制此文件为ftp_config.yaml并修改为实际配置
+
+# 源FTP服务器信息
+source:
+  host: "192.168.1.13" # 主机
+  port: 2123  # FTP端口，默认21
+  user: "NasSrv" # 用户名
+  password: "1" # 密码
+  directory: "/demo" # 目录
+  backup_directory: /backup # 备份目录
+  encoding: "gb2312" # 编码
+
+# 目标FTP服务器信息
+destination:
+  host: "192.168.1.30" # 主机
+  port: 2121  # FTP端口，默认21
+  user: "demo" # 用户名
+  password: "1" # 密码
+  directory: "/dest" # 目录
+  encoding: "utf-8" # 编码
+
+# 日志配置
+log:
+  file: "./data/log/ftp_transfer.log"  # 日志文件路径
+  rotation: "1 week"        # 日志轮转策略
+  retention: "1 month"      # 日志保留时间
+  level: "DEBUG"             # 日志级别
+
+# 邮件通知配置
+email:
+  enable: true                      # 是否启用邮件通知
+  subject: "FTP文件传输任务报告"     # 邮件主题
+  sender: "emrys.liu@foxmail.com"  # 发送者邮箱
+  recipients:                       # 接收者邮箱列表
+    - "emrys.liu@foxmail.com"
+    # - "recipient2@example.com"
+  smtp_server: "smtp.qq.com"   # SMTP服务器地址
+  smtp_port: 465                    # SMTP服务器端口
+  smtp_username: "emrys.liu@foxmail.com"  # SMTP用户名
+  smtp_password: "ncyuytguwiiibefi"    # SMTP密码或授权码
+  failure_threshold: 3              # 失败文件数量阈值，超过此值发送警告邮件

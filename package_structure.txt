@@ -1,0 +1,26 @@
+ftp_transfer
+├── MANIFEST.in
+├── changelog.md
+├── examples
+│   └── ftp_config.yaml.example
+├── ftp_transfer
+│   ├── __init__.py
+│   ├── __main__.py
+│   ├── cli.py
+│   ├── config.py
+│   ├── config_utils.py
+│   ├── core.py
+│   ├── ftp_operations.py
+│   ├── logger.py
+│   ├── notification.py
+│   └── utils.py
+├── ftp_transfer_files.txt
+├── package_structure.txt
+├── readme.md
+├── scripts
+│   └── build.sh
+├── setup.py
+└── tests
+    └── test_ftp_transfer.py
+
+5 directories, 19 files

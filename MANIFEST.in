@@ -1,0 +1,4 @@
+include readme.md
+include changelog.md
+recursive-include examples *.yaml.example
+recursive-include tests *.py
