@@ -1,6 +1,7 @@
 from setuptools import setup, find_packages
 import os
 import sys
+from ftp_transfer import __version__, __author__, __email__
 
 def read_file(filename):
     """读取文件内容，支持在不同环境中查找文件"""
@@ -51,9 +52,9 @@ if os.path.exists('examples'):
 
 setup(
     name="ftp_transfer",
-    version="0.0.7",
-    author="Emrys Liu",
-    author_email="emrys.liu@foxmail.comn",
+    version=__version__,
+    author=__author__,
+    author_email=__email__,
     description="一个用于在FTP服务器之间传输文件并提供通知功能的工具",
     long_description=read_file("readme.md"),
     long_description_content_type="text/markdown",
