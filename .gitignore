@@ -10,7 +10,7 @@ __pycache__/
 build/
 *.egg-info/
 *.egg
-*.whl
+# *.whl
 
 # Environment variables and configuration
 .env
