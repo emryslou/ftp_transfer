@@ -4,12 +4,12 @@ import sys
 import json
 from typing import Dict, Any
 import logging
-from . import __version__, __author__, __email__
-from .config import update_config, interactive_update_config, create_config
-from .config_utils import DEFAULT_CONFIG_PATH
-from .core import FTPTransfer
-from .logger import setup_logger
-from .utils import find_from_examples, find_from_package
+from ftp_transfer import __version__, __author__, __email__
+from ftp_transfer.config import update_config, interactive_update_config, create_config
+from ftp_transfer.config_utils import DEFAULT_CONFIG_PATH
+from ftp_transfer.core import FTPTransfer
+from ftp_transfer.logger import setup_logger
+from ftp_transfer.utils import find_from_examples, find_from_package
 
 # 设置日志
 logger = logging.getLogger(__name__)

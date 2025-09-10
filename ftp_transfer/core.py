@@ -1,7 +1,10 @@
 import os
 import sys
 import traceback
+import os
 from datetime import datetime
+import ftplib  # 新增：导入ftplib模块
+import re  # 新增：导入re库以支持正则表达式匹配
 from typing import List, Tuple, Dict, Optional, Any
 from loguru import logger
 
@@ -9,7 +12,23 @@ from .config import load_config, create_config
 from .config_utils import DEFAULT_CONFIG_PATH, _ensure_directory_exists, generate_trace_id, generate_archive_dir
 from .notification import send_email_notification
 from .logger import set_trace_id, setup_logger
-from .ftp_operations import connect_ftp, get_file_list, file_exists, download_file, upload_file, move_remote_file
+from .ftp_operations import (
+    connect_ftp,
+    connect_sftp,
+    get_file_list,
+    get_sftp_file_list,
+    download_file,
+    sftp_download_file,
+    upload_file,
+    sftp_upload_file,
+    move_remote_file,
+    sftp_move_remote_file,
+    file_exists,
+    sftp_file_exists,
+    close_sftp,
+    get_file_modification_time,  # 新增：导入获取文件修改时间的函数
+    get_sftp_file_info  # 新增：导入获取SFTP文件信息的函数
+)
 from . import __version__, __author__, __email__
 
 class FTPTransfer:
@@ -58,11 +77,19 @@ class FTPTransfer:
         self.source_pass = source_config.get('password', '')
         self.source_dir = source_config.get('directory', '')
         self.source_backup_dir = source_config.get('backup_directory', '')
+        self.source_enable_backup = source_config.get('enable_backup', True)  # 新增：备份功能开关，默认开启
         self.source_encoding = source_config.get('encoding', 'utf-8')
         # FTPS相关配置
         self.source_use_ftps = source_config.get('use_ftps', False)
         self.source_tls_implicit = source_config.get('tls_implicit', False)
         self.source_use_passive = source_config.get('use_passive', True)
+        # SFTP相关配置
+        self.source_use_sftp = source_config.get('use_sftp', False)
+        self.source_key_file = source_config.get('key_file', None)
+        self.source_passphrase = source_config.get('passphrase', None)
+        # 文件过滤配置
+        self.file_filter = source_config.get('file_filter', {})
+        
         
         destination_config = self.config.get('destination', {})
         self.dest_host = destination_config.get('host', '')
@@ -75,6 +102,12 @@ class FTPTransfer:
         self.dest_use_ftps = destination_config.get('use_ftps', False)
         self.dest_tls_implicit = destination_config.get('tls_implicit', False)
         self.dest_use_passive = destination_config.get('use_passive', True)
+        # SFTP相关配置
+        self.dest_use_sftp = destination_config.get('use_sftp', False)
+        self.dest_key_file = destination_config.get('key_file', None)
+        self.dest_passphrase = destination_config.get('passphrase', None)
+        # 目标文件存在处理策略
+        self.file_exists_strategy = destination_config.get('file_exists_strategy', 'rename')
         
         # 邮件配置
         self.email_config = self.config.get('email', {})
@@ -101,6 +134,106 @@ class FTPTransfer:
         base_name, ext = os.path.splitext(filename)
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         return f"{base_name}_{timestamp}{ext}"
+
+    def _filter_files(self, file_list: List[str], file_filter: Dict) -> List[str]:
+        """
+        根据文件过滤规则过滤文件列表
+        
+        :param file_list: 原始文件列表
+        :param file_filter: 文件过滤规则配置
+        :return: 过滤后的文件列表
+        """
+        if not file_filter or file_filter.get('type') == 'all':
+            return file_list
+        
+        filtered_files = []
+        filter_type = file_filter.get('type', 'all')
+        
+        # 连接到源服务器以获取文件时间信息（如果需要）
+        source_conn = None
+        need_file_info = filter_type in ['creation_time', 'modification_time']
+        
+        try:
+            if need_file_info:
+                if self.source_use_sftp:
+                    # 使用SFTP连接
+                    source_conn = connect_sftp(
+                        self.source_host,
+                        self.source_user,
+                        self.source_pass,
+                        self.source_port,
+                        self.source_key_file,
+                        self.source_passphrase
+                    )
+                else:
+                    # 使用FTP连接
+                    source_conn = connect_ftp(
+                        self.source_host,
+                        self.source_user,
+                        self.source_pass,
+                        self.source_port,
+                        self.source_encoding,
+                        use_ftps=self.source_use_ftps,
+                        tls_implicit=self.source_tls_implicit,
+                        use_passive=self.source_use_passive,
+                    )
+            
+            for filename in file_list:
+                if filter_type == 'pattern':
+                    # 字符匹配文件名
+                    pattern = file_filter.get('pattern', '')
+                    # 将通配符转换为正则表达式
+                    regex_pattern = pattern.replace('.', '\\.').replace('*', '.*').replace('?', '.')
+                    if re.search(regex_pattern, filename):
+                        filtered_files.append(filename)
+                elif filter_type == 'extension':
+                    # 文件后缀匹配
+                    extensions = file_filter.get('extensions', [])
+                    file_ext = filename.split('.')[-1].lower() if '.' in filename else ''
+                    if any(ext.lower() == file_ext for ext in extensions):
+                        filtered_files.append(filename)
+                elif filter_type in ['creation_time', 'modification_time']:
+                    # 时间过滤
+                    try:
+                        time_value_str = file_filter.get('time_value', '')
+                        time_type = file_filter.get('time_type', 'since')
+                        
+                        # 解析时间值
+                        if ' ' in time_value_str and ':' in time_value_str:
+                            filter_time = datetime.strptime(time_value_str, '%Y-%m-%d %H:%M:%S')
+                        else:
+                            filter_time = datetime.strptime(time_value_str, '%Y-%m-%d')
+                        
+                        # 获取文件时间
+                        file_time = None
+                        if self.source_use_sftp and source_conn:
+                            file_info = get_sftp_file_info(source_conn, self.source_dir, filename)
+                            if file_info:
+                                if filter_type == 'modification_time':
+                                    file_time = file_info['modified_time']
+                                else:
+                                    file_time = file_info['created_time']
+                        elif not self.source_use_sftp and source_conn:
+                            if filter_type == 'modification_time':
+                                file_time = get_file_modification_time(source_conn, self.source_dir, filename)
+                        
+                        # 比较时间
+                        if file_time:
+                            if time_type == 'since' and file_time >= filter_time:
+                                filtered_files.append(filename)
+                            elif time_type == 'before' and file_time <= filter_time:
+                                filtered_files.append(filename)
+                    except Exception as e:
+                        logger.warning(f"处理文件 {filename} 的时间信息时出错: {str(e)}")
+            
+            return filtered_files
+        finally:
+            # 关闭连接
+            if need_file_info:
+                if self.source_use_sftp and source_conn:
+                    close_sftp(source_conn)
+                elif not self.source_use_sftp and source_conn:
+                    source_conn.quit()
 
     def _prepare_email_content(self) -> Tuple[str, str, bool]:
         """准备邮件主题和内容"""
@@ -185,7 +318,7 @@ class FTPTransfer:
             html_body_parts.append("</table>")
             html_body_parts.append("<br>")
         
-        # 注意：由于已实现文件重命名上传，跳过的文件现在应该很少出现，除非出现特殊情况
+        # 显示根据文件存在策略跳过的文件
         if self.skipped_files:
             html_body_parts.append("<h3>跳过的文件</h3>")
             html_body_parts.append("<table>")
@@ -248,7 +381,7 @@ class FTPTransfer:
             plain_body_parts.append("\n".join([f"- {f}" for f in self.success_files]))
             plain_body_parts.append("")
         
-        # 注意：由于已实现文件重命名上传，跳过的文件现在应该很少出现，除非出现特殊情况
+        # 显示根据文件存在策略跳过的文件
         if self.skipped_files:
             plain_body_parts.append("跳过的文件:")
             plain_body_parts.append("\n".join([f"- {f}" for f in self.skipped_files]))
@@ -282,50 +415,99 @@ class FTPTransfer:
         :return: 一个元组 (找到的文件数, 成功传输的文件数, 跳过的文件数, 失败的文件数)
         """
         try:
-            # 连接到源FTP服务器
+            # 连接到源FTP/SFTP服务器
+            source_conn = None
             try:
-                source_ftp = connect_ftp(
-                    self.source_host, 
-                    self.source_user, 
-                    self.source_pass,
-                    self.source_port,
-                    self.source_encoding,
-                    use_ftps=self.source_use_ftps,
-                    tls_implicit=self.source_tls_implicit,
-                    use_passive=self.source_use_passive,
-                )
-            except Exception:
+                if self.source_use_sftp:
+                    # 使用SFTP连接
+                    source_conn = connect_sftp(
+                        self.source_host,
+                        self.source_user,
+                        self.source_pass,
+                        self.source_port,
+                        self.source_key_file,
+                        self.source_passphrase
+                    )
+                else:
+                    # 使用FTP连接
+                    source_conn = connect_ftp(
+                        self.source_host, 
+                        self.source_user, 
+                        self.source_pass,
+                        self.source_port,
+                        self.source_encoding,
+                        use_ftps=self.source_use_ftps,
+                        tls_implicit=self.source_tls_implicit,
+                        use_passive=self.source_use_passive,
+                    )
+            except Exception as e:
+                error_msg = f"连接源服务器失败: {str(e)}"
+                logger.error(error_msg)
+                self.errors.append(error_msg)
                 # 准备并发送邮件
                 subject, body, is_html = self._prepare_email_content()
                 send_email_notification(self.email_config, subject, body, is_html)
                 return (0, 0, 0, 0)
             
             # 获取源目录文件列表
-            file_list = get_file_list(source_ftp, self.source_dir)
+            if self.source_use_sftp:
+                file_list = get_sftp_file_list(source_conn, self.source_dir)
+            else:
+                file_list = get_file_list(source_conn, self.source_dir)
+            
+            if len(file_list):
+                # 应用文件过滤规则
+                if hasattr(self, 'file_filter') and self.file_filter:
+                    filtered_list = self._filter_files(file_list, self.file_filter)
+                    logger.info(f"应用文件过滤规则后，文件数量从 {len(file_list)} 减少到 {len(filtered_list)}")
+                    file_list = filtered_list
+            
             total_files = len(file_list)
             
             if total_files == 0:
                 logger.info("没有找到可传输的文件")
-                source_ftp.quit()
+                if self.source_use_sftp:
+                    close_sftp(source_conn)
+                else:
+                    source_conn.quit()
                 # 准备并发送邮件
                 subject, body, is_html = self._prepare_email_content()
                 send_email_notification(self.email_config, subject, body, is_html)
                 return (0, 0, 0, 0)
             
-            # 连接到目标FTP服务器
+            # 连接到目标FTP/SFTP服务器
+            dest_conn = None
             try:
-                dest_ftp = connect_ftp(
-                    self.dest_host, 
-                    self.dest_user, 
-                    self.dest_pass,
-                    self.dest_port,
-                    self.dest_encoding,
-                    use_ftps=self.dest_use_ftps,
-                    tls_implicit=self.dest_tls_implicit,
-                    use_passive=self.dest_use_passive,
-                )
-            except Exception:
-                source_ftp.quit()
+                if self.dest_use_sftp:
+                    # 使用SFTP连接
+                    dest_conn = connect_sftp(
+                        self.dest_host,
+                        self.dest_user,
+                        self.dest_pass,
+                        self.dest_port,
+                        self.dest_key_file,
+                        self.dest_passphrase
+                    )
+                else:
+                    # 使用FTP连接
+                    dest_conn = connect_ftp(
+                        self.dest_host, 
+                        self.dest_user, 
+                        self.dest_pass,
+                        self.dest_port,
+                        self.dest_encoding,
+                        use_ftps=self.dest_use_ftps,
+                        tls_implicit=self.dest_tls_implicit,
+                        use_passive=self.dest_use_passive,
+                    )
+            except Exception as e:
+                error_msg = f"连接目标服务器失败: {str(e)}"
+                logger.error(error_msg)
+                self.errors.append(error_msg)
+                if self.source_use_sftp:
+                    close_sftp(source_conn)
+                else:
+                    source_conn.quit()
                 # 准备并发送邮件
                 subject, body, is_html = self._prepare_email_content()
                 send_email_notification(self.email_config, subject, body, is_html)
@@ -339,45 +521,85 @@ class FTPTransfer:
                 logger.info(f"处理文件: {filename}")
                 
                 # 检查目标服务器是否已存在该文件
-                if file_exists(dest_ftp, self.dest_dir, filename):
-                    # 生成带时间戳的新文件名
-                    new_filename = self._generate_timestamped_filename(filename)
-                    logger.warning(f"目标服务器中已存在文件 {filename}，将重命名为 {new_filename} 上传")
-                    # 记录重命名的文件
-                    self.renamed_files[filename] = new_filename
-                    upload_filename = new_filename
+                file_already_exists = False
+                if self.dest_use_sftp:
+                    file_already_exists = sftp_file_exists(dest_conn, self.dest_dir, filename)
                 else:
-                    upload_filename = filename
+                    file_already_exists = file_exists(dest_conn, self.dest_dir, filename)
+                
+                upload_filename = filename
+                
+                if file_already_exists:
+                    strategy = self.file_exists_strategy.lower()
+                    
+                    if strategy == 'skip':
+                        logger.info(f"目标服务器中已存在文件 {filename}，根据策略将跳过此文件")
+                        self.skipped_files.append(filename)
+                        continue
+                    elif strategy == 'overwrite':
+                        logger.warning(f"目标服务器中已存在文件 {filename}，根据策略将覆盖此文件")
+                        # 仍然使用原始文件名，覆盖已有文件
+                    elif strategy == 'rename':
+                        # 生成带时间戳的新文件名
+                        new_filename = self._generate_timestamped_filename(filename)
+                        logger.warning(f"目标服务器中已存在文件 {filename}，根据策略将重命名为 {new_filename} 上传")
+                        # 记录重命名的文件
+                        self.renamed_files[filename] = new_filename
+                        upload_filename = new_filename
+                    else:
+                        # 默认使用重命名策略
+                        logger.warning(f"未知的文件存在策略 '{strategy}'，将默认使用重命名策略")
+                        new_filename = self._generate_timestamped_filename(filename)
+                        self.renamed_files[filename] = new_filename
+                        upload_filename = new_filename
                 
                 # 创建临时本地文件路径
                 local_temp_path = os.path.join(self.archive_dir, f"temp_{upload_filename}")
                 
-                # 确保在源目录
-                try:
-                    source_ftp.cwd(self.source_dir)
-                except ftplib.error_perm:
-                    logger.error(f"无法切换到源目录: {self.source_dir}")
-                    self.failed_files[filename] = f"无法切换到源目录: {self.source_dir}"
-                    continue
+                # 从源服务器下载文件到本地临时位置
+                download_success = False
+                if self.source_use_sftp:
+                    download_success = sftp_download_file(source_conn, filename, local_temp_path, self.source_dir)
+                else:
+                    # 确保在源目录
+                    try:
+                        source_conn.cwd(self.source_dir)
+                    except ftplib.error_perm:
+                        logger.error(f"无法切换到源目录: {self.source_dir}")
+                        self.failed_files[filename] = f"无法切换到源目录: {self.source_dir}"
+                        continue
+                    
+                    download_success = download_file(source_conn, filename, local_temp_path)
                 
-                # 从源FTP下载文件到本地临时位置
-                if not download_file(source_ftp, filename, local_temp_path):
+                if not download_success:
                     # 更详细的失败原因记录
                     error_details = f"下载失败: 系统找不到指定的文件 ({filename})"
                     self.failed_files[filename] = error_details
                     continue
                 
-                # 上传到目标FTP
-                dest_ftp.cwd(self.dest_dir)  # 确保在目标目录
-                if not upload_file(dest_ftp, local_temp_path, upload_filename):
+                # 上传到目标服务器
+                upload_success = False
+                if self.dest_use_sftp:
+                    upload_success = sftp_upload_file(dest_conn, local_temp_path, upload_filename, self.dest_dir)
+                else:
+                    dest_conn.cwd(self.dest_dir)  # 确保在目标目录
+                    upload_success = upload_file(dest_conn, local_temp_path, upload_filename)
+                
+                if not upload_success:
                     os.remove(local_temp_path)  # 清理临时文件
                     self.failed_files[filename] = "上传失败"
                     continue
                 
-                # 移动源文件到备份目录（如果配置了备份目录）
-                if self.source_backup_dir:
-                    logger.info(f"将文件 {filename} 移动到源FTP备份目录 {self.source_backup_dir}")
-                    if move_remote_file(source_ftp, filename, self.source_backup_dir + '/' + upload_filename):
+                # 移动源文件到备份目录（如果配置了备份目录且启用了备份功能）
+                if self.source_enable_backup and self.source_backup_dir:
+                    logger.info(f"将文件 {filename} 移动到源服务器备份目录 {self.source_backup_dir}")
+                    move_success = False
+                    if self.source_use_sftp:
+                        move_success = sftp_move_remote_file(source_conn, filename, upload_filename, self.source_dir, self.source_backup_dir)
+                    else:
+                        move_success = move_remote_file(source_conn, filename, self.source_backup_dir + '/' + upload_filename)
+                    
+                    if move_success:
                         # 如果文件被重命名，记录实际上传的文件名
                         if filename in self.renamed_files:
                             self.success_files.append(f"{filename} -> {self.renamed_files[filename]}")
@@ -386,7 +608,10 @@ class FTPTransfer:
                     else:
                         self.failed_files[filename] = "移动源文件到备份目录失败"
                 else:
-                    logger.info(f"未配置源FTP备份目录，跳过文件 {filename} 的备份")
+                    if self.source_enable_backup:
+                        logger.info(f"未配置源服务器备份目录，跳过文件 {filename} 的备份")
+                    else:
+                        logger.info(f"源服务器备份功能已禁用，跳过文件 {filename} 的备份")
                     # 如果文件被重命名，记录实际上传的文件名
                     if filename in self.renamed_files:
                         self.success_files.append(f"{filename} -> {self.renamed_files[filename]}")
@@ -398,38 +623,29 @@ class FTPTransfer:
                     os.remove(local_temp_path)
             
             # 关闭连接
-            source_ftp.quit()
-            dest_ftp.quit()
-            
-            logger.info(
-                f"传输完成: 找到 {total_files} 个，成功 {len(self.success_files)} 个，"
-                f"跳过 {len(self.skipped_files)} 个，失败 {len(self.failed_files)} 个"
-            )
+            if self.source_use_sftp:
+                close_sftp(source_conn)
+            else:
+                source_conn.quit()
+                
+            if self.dest_use_sftp:
+                close_sftp(dest_conn)
+            else:
+                dest_conn.quit()
             
             # 准备并发送邮件
             subject, body, is_html = self._prepare_email_content()
             send_email_notification(self.email_config, subject, body, is_html)
             
-            return (
-                total_files,
-                len(self.success_files),
-                len(self.skipped_files),
-                len(self.failed_files)
-            )
-            
+            return (total_files, len(self.success_files), len(self.skipped_files), len(self.failed_files))
         except Exception as e:
-            error_msg = f"传输过程中发生错误: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"文件传输过程中发生错误: {str(e)}")
             logger.debug(traceback.format_exc())
-            self.errors.append(error_msg)
+            # 记录错误信息
+            self.errors.append(f"文件传输过程中发生错误: {str(e)}")
             
             # 准备并发送邮件
             subject, body, is_html = self._prepare_email_content()
             send_email_notification(self.email_config, subject, body, is_html)
             
-            return (
-                len(self.found_files),
-                len(self.success_files),
-                len(self.skipped_files),
-                len(self.failed_files)
-            )
+            return (0, 0, 0, 0)

@@ -59,6 +59,8 @@ coverage.xml
 # Documentation build
 docs/_build/
 
+config/
+
 # Misc
 *.pem
 *.key

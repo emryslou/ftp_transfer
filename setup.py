@@ -75,6 +75,7 @@ setup(
     install_requires=[
         "loguru>=0.7.0",
         "pyyaml>=6.0",
+        "paramiko>=3.0.0",  # 新增：用于支持SFTP功能
     ],
     entry_points={
         "console_scripts": [

@@ -1,48 +1,63 @@
-# FTP服务器配置文件示例
-# 复制此文件为ftp_config.yaml并修改为实际配置
-# 注意：archive_directory已不再需要配置，程序会自动生成
+# FTP/SFTP传输配置示例
+# 本文件提供了一个完整的配置示例，您可以复制并重命名为ftp_config.yaml使用
 
-# 源FTP服务器信息
+# 源服务器配置
 source:
-  host: "source.ftp.example.com"
-  port: 21  # FTP端口，默认21
-  user: "source_user"
-  password: "source_password"
-  directory: "/source/directory"
-  backup_directory: "/source/backup"  # 处理完成后文件备份目录（可选）
-  use_ftps: false  # 是否使用FTPS加密连接
-  tls_implicit: false  # 是否使用隐式TLS（通常使用端口990）
-  use_passive: true  # 是否使用被动模式
+  host: example.com  # 源FTP/SFTP服务器地址
+  port: 21  # 端口，FTP默认21，SFTP默认22
+  user: username  # 用户名
+  password: password  # 密码
+  directory: /path/to/source  # 源目录路径
+  encoding: utf-8  # 文件编码，默认为utf-8
+  use_ftps: false  # 是否使用FTPS，默认false
+  tls_implicit: false  # 是否使用隐式TLS，默认false
+  use_passive: true  # 是否使用被动模式，默认true
+  enable_backup: true  # 处理完成后是否备份文件到备份目录，默认true
+  backup_directory: /path/to/backup  # 备份目录路径，可选配置
+  use_sftp: false  # 是否使用SFTP，默认false
+  key_file: /path/to/key.pem  # SFTP私钥文件路径，当使用SFTP且使用密钥认证时需要
+  passphrase: your_passphrase  # SFTP私钥密码，当密钥有密码时需要
+  
+  # 文件过滤规则配置
+  file_filter:
+    type: all  # 文件过滤类型，可选值：all(全部文件), pattern(按字符匹配), extension(按后缀匹配), creation_time(按创建时间), modification_time(按修改时间)
+    pattern: "*.txt"  # 当type为pattern时，指定匹配模式，如"*.txt"或"report_2023*"
+    extensions: ["txt", "csv", "xlsx"]  # 当type为extension时，指定文件后缀列表
+    time_type: "since"  # 当type为creation_time或modification_time时，指定时间过滤类型：since(自从某时间), before(在某时间之前)
+    time_value: "2023-01-01"  # 当type为creation_time或modification_time时，指定时间值，格式：YYYY-MM-DD或YYYY-MM-DD HH:MM:SS
 
-
-# 目标FTP服务器信息
+# 目标服务器配置
 destination:
-  host: "dest.ftp.example.com"
-  port: 21  # FTP端口，默认21
-  user: "dest_user"
-  password: "dest_password"
-  directory: "/destination/directory"
-  use_ftps: false  # 是否使用FTPS加密连接
-  tls_implicit: false  # 是否使用隐式TLS（通常使用端口990）
-
+  host: destination.com  # 目标FTP/SFTP服务器地址
+  port: 21  # 端口，FTP默认21，SFTP默认22
+  user: username  # 用户名
+  password: password  # 密码
+  directory: /path/to/destination  # 目标目录路径
+  encoding: utf-8  # 文件编码，默认为utf-8
+  use_ftps: false  # 是否使用FTPS，默认false
+  tls_implicit: false  # 是否使用隐式TLS，默认false
+  use_passive: true  # 是否使用被动模式，默认true
+  use_sftp: false  # 是否使用SFTP，默认false
+  key_file: /path/to/key.pem  # SFTP私钥文件路径，当使用SFTP且使用密钥认证时需要
+  passphrase: your_passphrase  # SFTP私钥密码，当密钥有密码时需要
 
 # 日志配置
 log:
-  file: "ftp_transfer.log"  # 日志文件路径
-  rotation: "1 week"        # 日志轮转策略
-  retention: "1 month"      # 日志保留时间
-  level: "INFO"             # 日志级别
+  enabled: true  # 是否启用日志，默认true
+  level: INFO  # 日志级别，可选：DEBUG, INFO, WARNING, ERROR
+  file: /path/to/ftp_transfer.log  # 日志文件路径
 
 # 邮件通知配置
 email:
-  enable: false                      # 是否启用邮件通知
-  subject: "FTP文件传输任务报告"     # 邮件主题
-  sender: "notifications@example.com"  # 发送者邮箱
-  recipients:                       # 接收者邮箱列表
-    - "recipient1@example.com"
-    - "recipient2@example.com"
-  smtp_server: "smtp.example.com"   # SMTP服务器地址
-  smtp_port: 587                    # SMTP服务器端口
-  smtp_username: "your_email@example.com"  # SMTP用户名
-  smtp_password: "your_password"    # SMTP密码或授权码
-  failure_threshold: 3              # 失败文件数量阈值，超过此值发送警告邮件
+  enabled: false  # 是否启用邮件通知，默认false
+  smtp_server: smtp.example.com  # SMTP服务器地址
+  smtp_port: 587  # SMTP服务器端口
+  use_tls: true  # 是否使用TLS，默认true
+  username: email@example.com  # 发件人邮箱
+  password: email_password  # 发件人密码或授权码
+  from_address: email@example.com  # 发件人地址
+  to_address: recipient@example.com  # 收件人地址
+  subject: FTP/SFTP传输任务完成通知  # 邮件主题
+  
+# 归档目录配置
+# archive_directory: /path/to/archive  # 可选配置，指定本地临时文件存储目录
