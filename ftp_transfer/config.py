@@ -121,10 +121,28 @@ def interactive_update_config(config_path: str) -> None:
         
         config['source'].update({
             'directory': input(f"请输入源FTP目录路径 (当前: {config['source'].get('directory', '')}): ") or config['source'].get('directory', ''),
-            'backup_directory': input(f"请输入源FTP备份目录路径 (当前: {config['source'].get('backup_directory', '')}): ") or config['source'].get('backup_directory', ''),
             'encoding': input(f"请输入源FTP编码 (当前: {config['source'].get('encoding', 'utf-8')}): ") or config['source'].get('encoding', 'utf-8'),
             'use_ftps': input(f"是否使用FTPS加密连接? (y/n, 当前: {'y' if config['source'].get('use_ftps', False) else 'n'}): ").lower() == 'y' if input(f"是否使用FTPS加密连接? (y/n, 当前: {'y' if config['source'].get('use_ftps', False) else 'n'}): ") else config['source'].get('use_ftps', False)
         })
+        
+        # 处理源服务器文件备份开关
+        # 兼容旧版配置：如果备份目录已设置，则自动打开开关
+        current_backup_enabled = config['source'].get('backup_enabled', bool(config['source'].get('backup_directory', '')))
+        
+        # 获取用户输入
+        backup_input = input(f"是否启用源服务器文件备份? (y/n, 当前: {'y' if current_backup_enabled else 'n'}): ").lower()
+        if backup_input in ('y', 'n'):
+            config['source']['enable_backup'] = (backup_input == 'y')
+        else:
+            config['source']['enable_backup'] = current_backup_enabled
+        
+        # 只有在启用备份时才设置备份目录
+        if config['source']['enable_backup']:
+            current_backup_dir = config['source'].get('backup_directory', '')
+            config['source']['backup_directory'] = input(f"请输入源FTP备份目录路径 (当前: {current_backup_dir}): ") or current_backup_dir
+        elif 'backup_directory' in config['source']:
+            # 如果禁用备份，保留但不显示备份目录
+            pass
         
         # 更新目标FTP配置
         print("\n------ 目标FTP服务器配置 ------")
@@ -218,17 +236,18 @@ def create_config(config_path: str) -> None:
     # 引导用户填写配置信息
     config = {
         'source': {
-            'host': input("请输入源FTP服务器地址: "),
-            'port': int(input("请输入源FTP端口 (默认为21，隐式FTPS通常使用990): ") or "21"),
-            'user': input("请输入源FTP用户名: "),
-            'password': getpass.getpass("请输入源FTP密码: "),
-            'directory': input("请输入源FTP目录路径: "),
-            'backup_directory': input("请输入源FTP备份目录路径 (用于文件处理后备份): "),
-            'encoding': input("请输入源FTP编码 (默认为'utf-8', windows系统请输入'gbk'): ") or "utf-8",
-            'use_ftps': input("是否使用FTPS加密连接? (y/n, 默认n): ").lower() == 'y',
-            'tls_implicit': False,  # 默认使用显式TLS
-            'use_passive': True,
-        },
+                'host': input("请输入源FTP服务器地址: "),
+                'port': int(input("请输入源FTP端口 (默认为21，隐式FTPS通常使用990): ") or "21"),
+                'user': input("请输入源FTP用户名: "),
+                'password': getpass.getpass("请输入源FTP密码: "),
+                'directory': input("请输入源FTP目录路径: "),
+                'encoding': input("请输入源FTP编码 (默认为'utf-8', windows系统请输入'gbk'): ") or "utf-8",
+                'use_ftps': input("是否使用FTPS加密连接? (y/n, 默认n): ").lower() == 'y',
+                'tls_implicit': False,  # 默认使用显式TLS
+                'use_passive': True,
+                'enable_backup': False,  # 新配置默认关闭备份
+                'backup_directory': '',  # 默认不设置备份目录
+            },
         'destination': {
             'host': input("请输入目标FTP服务器地址: "),
             'port': int(input("请输入目标FTP端口 (默认为21，隐式FTPS通常使用990): ") or "21"),

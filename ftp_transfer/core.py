@@ -58,6 +58,7 @@ class FTPTransfer:
         self.source_pass = source_config.get('password', '')
         self.source_dir = source_config.get('directory', '')
         self.source_backup_dir = source_config.get('backup_directory', '')
+        self.source_enable_backup = source_config.get('enable_backup', False)  # 获取备份开关状态
         self.source_encoding = source_config.get('encoding', 'utf-8')
         # FTPS相关配置
         self.source_use_ftps = source_config.get('use_ftps', False)
@@ -374,8 +375,8 @@ class FTPTransfer:
                     self.failed_files[filename] = "上传失败"
                     continue
                 
-                # 移动源文件到备份目录（如果配置了备份目录）
-                if self.source_backup_dir:
+                # 移动源文件到备份目录（如果启用了备份功能并且配置了备份目录）
+                if self.source_enable_backup and self.source_backup_dir:
                     logger.info(f"将文件 {filename} 移动到源FTP备份目录 {self.source_backup_dir}")
                     if move_remote_file(source_ftp, filename, self.source_backup_dir + '/' + upload_filename):
                         # 如果文件被重命名，记录实际上传的文件名
@@ -386,7 +387,10 @@ class FTPTransfer:
                     else:
                         self.failed_files[filename] = "移动源文件到备份目录失败"
                 else:
-                    logger.info(f"未配置源FTP备份目录，跳过文件 {filename} 的备份")
+                    if not self.source_enable_backup:
+                        logger.info(f"源FTP备份功能已禁用，跳过文件 {filename} 的备份")
+                    else:
+                        logger.info(f"未配置源FTP备份目录，跳过文件 {filename} 的备份")
                     # 如果文件被重命名，记录实际上传的文件名
                     if filename in self.renamed_files:
                         self.success_files.append(f"{filename} -> {self.renamed_files[filename]}")

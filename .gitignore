@@ -18,7 +18,7 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
-config/local.yaml
+config/
 
 # Logs
 logs/
@@ -58,6 +58,8 @@ coverage.xml
 
 # Documentation build
 docs/_build/
+
+scripts/*.txt
 
 # Misc
 *.pem
