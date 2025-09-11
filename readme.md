@@ -151,7 +151,9 @@ source:
    time_value: # 文件时间在 最近一天修改的文件
     - "current_day"  # 表示当前日期之前修改的文件
     - "days_before_1"  # 表示当前周之前修改的文件```
+
 ### 时间值说明
+```
 时间值，格式：YYYY-MM-DD HH:MM:SS, 或者 current_day, current_hour, current_minute, current_time, days_before_{n}, hours_before_{n}, minutes_before_{n}
 假设当前时间为 2025-09-11 12:15:31.383282
 **current_day** -- 当天: 例如 2025-09-11 00:00:00, # 动态计算
@@ -161,6 +163,7 @@ source:
 **days_before_{n}** -- 前n天: 例如 days_before_1 -- 前1天: 2025-09-10 00:00:00, days_before_2 -- 前2天: 2025-09-09 00:00:00, # 动态计算
 **hours_before_{n}** -- 前n小时: 例如 hours_before_1 -- 前1小时: 2025-09-11 11:00:00, hours_before_2 -- 前2小时: 2025-09-11 10:00:00, # 动态计算
 **minutes_before_{n}** -- 前n分钟: 例如 minutes_before_1 -- 前1分钟: 2025-09-11 12:14:00, minutes_before_2 -- 前2分钟: 2025-09-11 12:13:00, # 动态计算
+```
 
 ### 目标服务器配置
 ```yaml
