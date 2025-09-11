@@ -106,7 +106,7 @@ def server_config(_config: dict|None = None, backup: bool = True) -> dict:
     # 如果使用SFTP，询问密钥文件和密码
     if default_config['use_sftp']:
         default_config['password'] = input("密码 (按Enter键如果不设置密码，使用密钥认证): ") or None
-        default_config['port'] = int(input("端口 (默认: 22): ") or 21)
+        default_config['port'] = int(input("端口 (默认: 22): ") or 22)
         if not default_config['password']:
             default_config['key_file'] = input("私钥文件路径 (可选，按Enter跳过): ") or None
             if not default_config['key_file']:
@@ -134,7 +134,7 @@ def update_server_config(server_config: dict, backup: bool = True) -> dict:
     # 确保所有必要的配置项存在
     default_server_config = {
         'host': '',
-        'port': 21,
+        'port': None,
         'user': '',
         'password': None,
         'directory': '',

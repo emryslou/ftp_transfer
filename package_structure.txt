@@ -1,4 +1,5 @@
 ftp_transfer
+├── LICENSE
 ├── MANIFEST.in
 ├── changelog.md
 ├── examples
@@ -18,9 +19,13 @@ ftp_transfer
 ├── package_structure.txt
 ├── readme.md
 ├── scripts
-│   └── build.sh
+│   ├── build.sh
+│   └── profile.txt
 ├── setup.py
 └── tests
-    └── test_ftp_transfer.py
+    ├── test_close_sftp.py
+    ├── test_ftp_operations.py
+    ├── test_ftp_transfer.py
+    └── test_transport_plugin.py
 
-5 directories, 19 files
+5 directories, 24 files
