@@ -40,6 +40,7 @@ destination:
   use_sftp: false  # 是否使用SFTP，默认false
   key_file: /path/to/key.pem  # SFTP私钥文件路径，当使用SFTP且使用密钥认证时需要
   passphrase: your_passphrase  # SFTP私钥密码，当密钥有密码时需要
+  file_exists_strategy: rename  # 文件存在处理策略，可选值：skip(跳过), overwrite(覆盖), rename(重命名)
 
 # 日志配置
 log:
@@ -61,3 +62,8 @@ email:
   
 # 归档目录配置
 # archive_directory: /path/to/archive  # 可选配置，指定本地临时文件存储目录
+
+# 文件存在处理策略说明
+# - skip: 当目标服务器中已存在同名文件时，跳过该文件的上传
+# - overwrite: 当目标服务器中已存在同名文件时，覆盖已存在的文件
+# - rename: 当目标服务器中已存在同名文件时，生成带时间戳的新文件名进行上传

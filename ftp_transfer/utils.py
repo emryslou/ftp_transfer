@@ -3,6 +3,7 @@ import sys
 import site
 import importlib.resources
 from typing import List, Tuple, Callable, Optional
+import datetime
 
 def _get_system_share_paths() -> List[str]:
     """获取系统共享目录路径（跨平台兼容）"""
@@ -96,6 +97,33 @@ def find_from_examples(file_name: str) -> str:
             return path
     
     raise FileNotFoundError(f"无法找到 {file_name}。请确认包已正确安装，或尝试重新安装。")
+
+def parse_time_value_str(time_value: str) -> datetime.datetime:
+    from zoneinfo import ZoneInfo
+
+    zone_info = ZoneInfo("Asia/Shanghai")
+    """解析时间值字符串"""
+    
+    if time_value == "current_time":
+        return datetime.datetime.now(zone_info).replace(microsecond=0)
+    elif time_value == "current_minute":
+        return datetime.datetime.now(zone_info).replace(second=0, microsecond=0)
+    elif time_value == "current_hour":
+        return datetime.datetime.now(zone_info).replace(minute=0, second=0, microsecond=0)
+    elif time_value == "current_day":
+        return datetime.datetime.now(zone_info).replace(hour=0, minute=0, second=0, microsecond=0)
+    elif time_value.startswith("days_before_"):
+        days = int(time_value.split("_")[-1])
+        return parse_time_value_str("current_day") - datetime.timedelta(days=days)
+    elif time_value.startswith("hours_before_"):
+        hours = int(time_value.split("_")[-1])
+        return parse_time_value_str("current_hour")- datetime.timedelta(hours=hours)
+    elif time_value.startswith("minutes_before_"):
+        minutes = int(time_value.split("_")[-1])
+        return parse_time_value_str("current_minute") - datetime.timedelta(minutes=minutes)   
+    else:
+        return datetime.datetime.strptime(time_value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=zone_info)
+
 
 def find_from_package(file_name: str) -> str:
     """从包安装位置查找文件"""

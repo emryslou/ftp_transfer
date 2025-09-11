@@ -401,10 +401,8 @@ def close_sftp(sftp: paramiko.SFTPClient) -> None:
     :param sftp: SFTP客户端对象
     """
     try:
-        # 获取SSH客户端并关闭
-        ssh_client = sftp.get_channel().get_transport().get_ssh_client()
+        # 直接关闭SFTP连接，paramiko会自动处理底层连接的关闭
         sftp.close()
-        ssh_client.close()
         logger.info("SFTP连接已关闭")
     except Exception as e:
         logger.warning(f"关闭SFTP连接时出错: {str(e)}")

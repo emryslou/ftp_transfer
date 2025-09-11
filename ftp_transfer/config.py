@@ -263,18 +263,29 @@ def update_file_filter_config(file_filter_config: dict) -> dict:
             updated_config['extensions'] = [ext.strip() for ext in extensions_input.split(',')] if extensions_input else current_extensions
         elif updated_config['type'] in ['creation_time', 'modification_time']:
             # 确保time_type和time_value配置项存在
-            if 'time_type' not in updated_config:
-                updated_config['time_type'] = 'since'
-            if 'time_value' not in updated_config:
-                updated_config['time_value'] = ''
-            
-            current_time_type = updated_config.get('time_type', 'since')
-            print(f"当前时间过滤类型: {current_time_type}")
-            updated_config['time_type'] = input("新时间过滤类型 (since/before): ") or current_time_type
-            
-            current_time_value = updated_config.get('time_value', '')
-            print(f"当前时间值: {current_time_value}")
-            updated_config['time_value'] = input("新时间值 (格式: YYYY-MM-DD或YYYY-MM-DD HH:MM:SS): ") or current_time_value
+            input_time_value_description = """配置一个，表示 file_time < 第一个时间，配置两个: file_time < 第一个时间 and file_time >= 第二个时间 
+时间值，格式：YYYY-MM-DD HH:MM:SS, 或者 current_day, current_hour, current_minute, current_time, days_before_{n}, hours_before_{n}, minutes_before_{n}
+假设当前时间为 2025-09-11 12:15:31.383282
+    current_day -- 当天: 例如 2025-09-11 00:00:00, # 动态计算
+    current_hour -- 当前小时: 例如 2025-09-11 12:00:00, # 动态计算
+    current_minute -- 当前分钟: 例如 2025-09-11 12:15:00, # 动态计算
+    current_time -- 当前时间: 例如 2025-09-11 12:15:31, # 动态计算
+    days_before_{n} -- 前n天: 例如 days_before_1 -- 前1天: 2025-09-10 00:00:00, days_before_2 -- 前2天: 2025-09-09 00:00:00, # 动态计算
+    hours_before_{n} -- 前n小时: 例如 hours_before_1 -- 前1小时: 2025-09-11 11:00:00, hours_before_2 -- 前2小时: 2025-09-11 10:00:00, # 动态计算
+    minutes_before_{n} -- 前n分钟: 例如 minutes_before_1 -- 前1分钟: 2025-09-11 12:14:00, minutes_before_2 -- 前2分钟: 2025-09-11 12:13:00, # 动态计算
+注意: 第二个时间不能大于第一个时间
+例如：
+    配置：2025-09-11 12:15:31, 2025-09-11 12:15:00
+    配置：2025-09-11 12:15:31
+    配置：current_day, days_before_1
+    配置：current_hour, hours_before_1
+    配置：current_minute, minutes_before_1
+    配置：current_second,seconds_before_1
+"""
+            current_time_value = update_config.get('time_value', [])
+            input_time_value = str(input(input_time_value_description + '新时间值, 多个值用英文逗号分隔, 最多两个 (当前: ' + current_time_value + '): '))
+            input_time_value = [item.strip() for item in input_time_value.split(',')][:2]
+            update_config['time_value'] = input_time_value or current_time_value
     
     return updated_config
 
@@ -393,9 +404,7 @@ def create_config(config_file_path: str) -> None:
         
         # 添加文件过滤规则配置
         print("\n配置文件过滤规则:")
-        file_filter_config = {
-            'type': input("文件过滤类型 (all/pattern/extension/creation_time/modification_time, 默认: all): ") or 'all'
-        }
+        file_filter_config = { 'type': input("文件过滤类型 (all/pattern/extension/creation_time/modification_time, 默认: all): ") or 'all' }
         
         if file_filter_config['type'] == 'pattern':
             file_filter_config['pattern'] = input("文件匹配模式 (如\"*.txt\"或\"report_2023*\"): ")
@@ -403,13 +412,34 @@ def create_config(config_file_path: str) -> None:
             extensions_input = input("文件后缀列表 (用逗号分隔，如\"txt,csv,xlsx\"): ")
             file_filter_config['extensions'] = [ext.strip() for ext in extensions_input.split(',')] if extensions_input else []
         elif file_filter_config['type'] in ['creation_time', 'modification_time']:
-            file_filter_config['time_type'] = input("时间过滤类型 (since/before, 默认: since): ") or 'since'
-            file_filter_config['time_value'] = input("时间值 (格式: YYYY-MM-DD或YYYY-MM-DD HH:MM:SS): ")
+            input_time_value_description = """
+配置一个，表示 file_time < 第一个时间，配置两个: file_time < 第一个时间 and file_time >= 第二个时间 
+时间值，格式：YYYY-MM-DD HH:MM:SS, 或者 current_day, current_hour, current_minute, current_time, days_before_{n}, hours_before_{n}, minutes_before_{n}
+假设当前时间为 2025-09-11 12:15:31.383282
+    current_day -- 当天: 例如 2025-09-11 00:00:00, # 动态计算
+    current_hour -- 当前小时: 例如 2025-09-11 12:00:00, # 动态计算
+    current_minute -- 当前分钟: 例如 2025-09-11 12:15:00, # 动态计算
+    current_time -- 当前时间: 例如 2025-09-11 12:15:31, # 动态计算
+    days_before_{n} -- 前n天: 例如 days_before_1 -- 前1天: 2025-09-10 00:00:00, days_before_2 -- 前2天: 2025-09-09 00:00:00, # 动态计算
+    hours_before_{n} -- 前n小时: 例如 hours_before_1 -- 前1小时: 2025-09-11 11:00:00, hours_before_2 -- 前2小时: 2025-09-11 10:00:00, # 动态计算
+    minutes_before_{n} -- 前n分钟: 例如 minutes_before_1 -- 前1分钟: 2025-09-11 12:14:00, minutes_before_2 -- 前2分钟: 2025-09-11 12:13:00, # 动态计算
+注意: 第二个时间不能大于第一个时间
+例如:
+    配置：2025-09-11 12:15:31, 2025-09-11 12:15:00
+    配置：2025-09-11 12:15:31
+    配置：current_day, days_before_1
+    配置：current_hour, hours_before_1
+    配置：current_minute, minutes_before_1
+    配置：current_second,seconds_before_1
+"""
+            input_time_value = input(input_time_value_description + "时间值,多个用逗号分隔，最多两个: ")
+            file_filter_config['time_value'] = [item.strip() for item in input_time_value.split(',')][:2]
         config['source']['file_filter'] = file_filter_config
         
         # 目标服务器配置
         print("\n配置目标服务器信息:")
         config['destination'] = server_config(backup=False)
+        config['destination']['file_exists_strategy'] = input("文件存在策略 (skip/overwrite/rename, 默认: skip): ") or 'skip'
         
         # 日志配置
         print("\n配置日志设置:")

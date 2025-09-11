@@ -1,17 +1,19 @@
 # FTP Transfer Tool
 
-一个功能强大的FTP文件传输工具，用于在FTP服务器之间高效传输文件并提供完整的通知功能。支持配置文件驱动、文件过滤、自动归档和多平台兼容。
+一个功能强大的FTP/SFTP文件传输工具，用于在FTP/SFTP服务器之间高效传输文件并提供完整的通知功能。支持配置文件驱动、文件过滤、自动归档和多平台兼容。
 
 ## 功能特点
 
-- **多服务器文件传输**：从源FTP服务器扫描并上传文件到目标FTP服务器
-- **灵活的文件过滤**：通过文件模式和排除模式精确控制需要传输的文件
-- **安全的文件处理**：支持文件存在检查，可配置是否覆盖现有文件
-- **完整的归档机制**：上传成功后将源文件自动移动到指定目录
-- **详细的日志记录**：使用loguru库实现全面的日志记录，支持日志轮转和压缩
+- **多服务器文件传输**：从源FTP/SFTP服务器扫描并上传文件到目标FTP/SFTP服务器
+- **灵活的文件过滤**：通过文件模式、扩展名、时间戳等多种方式精确控制需要传输的文件
+- **安全的文件处理**：支持文件存在检查，可配置三种不同的文件存在处理策略（跳过、覆盖、重命名）
+- **完整的归档机制**：上传成功后将源文件自动移动到指定目录或跳过备份
+- **详细的日志记录**：实现全面的日志记录，支持日志级别设置
 - **智能邮件通知**：根据执行情况（成功、部分成功、失败）发送不同的邮件通知
 - **配置文件驱动**：基于YAML配置文件，易于管理和自动化部署
 - **跨平台兼容**：同时支持Windows、Linux、macOS等操作系统
+- **支持SFTP协议**：同时支持传统FTP和安全的SFTP协议传输
+- **支持FTPS协议**：支持通过TLS加密的FTPS协议传输
 
 ## 安装方法
 
@@ -101,65 +103,112 @@ ftp_transfer [命令] [参数]
 
 配置文件使用YAML格式，主要包含以下部分：
 
-### 源FTP服务器配置
+### 源服务器配置
 ```yaml
 source:
-  host: "source.example.com"  # 源FTP服务器地址
-  port: 21                    # 源FTP服务器端口
-  username: "username"        # 用户名
+  host: "source.example.com"  # 源FTP/SFTP服务器地址
+  port: 21                    # 端口，FTP默认21，SFTP默认22
+  user: "username"            # 用户名
   password: "password"        # 密码
-  use_passive: true           # 是否使用被动模式
-  directory: "/path/to/source/directory"  # 源目录
-  file_patterns: ["*.txt", "*.pdf"]  # 要传输的文件模式
-  exclude_patterns: ["*.tmp", ".*~"]  # 要排除的文件模式
+  directory: "/path/to/source"  # 源目录路径
+  encoding: utf-8             # 文件编码，默认为utf-8
+  use_ftps: false             # 是否使用FTPS，默认false
+  tls_implicit: false         # 是否使用隐式TLS，默认false
+  use_passive: true           # 是否使用被动模式，默认true
+  enable_backup: true         # 处理完成后是否备份文件到备份目录，默认true
+  backup_directory: "/path/to/backup"  # 备份目录路径
+  use_sftp: false             # 是否使用SFTP，默认false
+  key_file: "/path/to/key.pem"  # SFTP私钥文件路径
+  passphrase: "your_passphrase"  # SFTP私钥密码
+  
+  # 文件过滤规则配置
+  file_filter:
+    type: "modification_time"  # 文件过滤类型，可选值：all(全部文件), pattern(按字符匹配), extension(按后缀匹配), modification_time(按修改时间)
+    pattern: "*.txt"           # 当type为pattern时，指定匹配模式
+    extensions: ["txt", "csv", "xlsx"]  # 当type为extension时，指定文件后缀列表
+    time_value: # 当type为modification_time时，指定时间值
+      - "2023-01-02 00:00:00"   # 当type为modification_time时，指定时间值
+      - "2023-01-01 00:00:00"   # 当type为modification_time时，指定时间值
 ```
+### 文件过滤规则说明
+* 当type为`all`时，不进行文件过滤
+* 当type为`pattern`时，根据`pattern`进行文件过滤
+   ```pattern = foo* 表示 foo 开头的所有文件
+   pattern = *bar 表示 bar 结尾的所有文件
+   pattern = *bar* 表示包含 bar 的所有文件
+   pattern = foo*bar 表示 foo 开头且包含 bar 的所有文件
+   pattern = *bar*baz 表示包含 bar 且包含 baz 的所有文件
+   pattern = *barbaz* 表示包含 barbaz 的所有文件
+* 当type为`extension`时，根据`extensions`进行文件过滤```
+* 当type为`modification_time`时，根据`time_value`进行文件过滤
+   ```time_value: # 表示 2023 年 1 月 2 日 00:00:00 之后修改的文件
+    - "2023-01-02 00:00:00"  # 表示 2023 年 1 月 2 日 00:00:00 之后修改的文件
+   time_value: # 表示 文件时间在 2023 年 1 月 2 日 00:00:00 到 2023 年 1 月 3 日 00:00:00 之间
+    - "2023-01-02 00:00:00"  # 表示 2023 年 1 月 2 日 00:00:00 之前修改的文件
+    - "2022-01-01 00:00:00"  # 表示 2022 年 1 月 1 日 00:00:00 之前修改的文件
+   time_value: #
+    - "current_day"  # 表示当前日期之前修改的文件
+   time_value: # 文件时间在 最近一天修改的文件
+    - "current_day"  # 表示当前日期之前修改的文件
+    - "days_before_1"  # 表示当前周之前修改的文件```
+### 时间值说明
+时间值，格式：YYYY-MM-DD HH:MM:SS, 或者 current_day, current_hour, current_minute, current_time, days_before_{n}, hours_before_{n}, minutes_before_{n}
+假设当前时间为 2025-09-11 12:15:31.383282
+**current_day** -- 当天: 例如 2025-09-11 00:00:00, # 动态计算
+**current_hour** -- 当前小时: 例如 2025-09-11 12:00:00, # 动态计算
+**current_minute** -- 当前分钟: 例如 2025-09-11 12:15:00, # 动态计算
+**current_time** -- 当前时间: 例如 2025-09-11 12:15:31, # 动态计算
+**days_before_{n}** -- 前n天: 例如 days_before_1 -- 前1天: 2025-09-10 00:00:00, days_before_2 -- 前2天: 2025-09-09 00:00:00, # 动态计算
+**hours_before_{n}** -- 前n小时: 例如 hours_before_1 -- 前1小时: 2025-09-11 11:00:00, hours_before_2 -- 前2小时: 2025-09-11 10:00:00, # 动态计算
+**minutes_before_{n}** -- 前n分钟: 例如 minutes_before_1 -- 前1分钟: 2025-09-11 12:14:00, minutes_before_2 -- 前2分钟: 2025-09-11 12:13:00, # 动态计算
 
-### 目标FTP服务器配置
+### 目标服务器配置
 ```yaml
 destination:
-  host: "destination.example.com"  # 目标FTP服务器地址
-  port: 21                        # 目标FTP服务器端口
-  username: "username"            # 用户名
+  host: "destination.example.com"  # 目标FTP/SFTP服务器地址
+  port: 21                        # 端口，FTP默认21，SFTP默认22
+  user: "username"                # 用户名
   password: "password"            # 密码
-  use_passive: true               # 是否使用被动模式
-  directory: "/path/to/destination/directory"  # 目标目录
-  overwrite: true                 # 是否覆盖已存在的文件
-  preserve_structure: true        # 是否保留目录结构
-  archive_after_transfer: true    # 传输后是否归档源文件
-  archive_dir: "/path/to/archive"  # 归档目录
+  directory: "/path/to/destination"  # 目标目录路径
+  encoding: utf-8                 # 文件编码，默认为utf-8
+  use_ftps: false                 # 是否使用FTPS，默认false
+  tls_implicit: false             # 是否使用隐式TLS，默认false
+  use_passive: true               # 是否使用被动模式，默认true
+  use_sftp: false                 # 是否使用SFTP，默认false
+  key_file: "/path/to/key.pem"    # SFTP私钥文件路径
+  passphrase: "your_passphrase"    # SFTP私钥密码
+  file_exists_strategy: "rename"  # 文件存在处理策略，可选值：skip(跳过), overwrite(覆盖), rename(重命名)
 ```
 
-### 文件传输配置
-```yaml
-transfer:
-  chunk_size: 8192   # 传输块大小
-  max_retries: 3     # 最大重试次数
-  retry_delay: 5     # 重试间隔（秒）
-  timeout: 30        # 超时时间（秒）
-```
+### 文件存在处理策略说明
+
+目标服务器上已存在同名文件时，工具提供三种不同的处理策略：
+
+- **skip**: 当目标服务器中已存在同名文件时，跳过该文件的上传
+- **overwrite**: 当目标服务器中已存在同名文件时，覆盖已存在的文件
+- **rename**: 当目标服务器中已存在同名文件时，生成带时间戳的新文件名进行上传
 
 ### 日志配置
 ```yaml
 log:
+  enabled: true              # 是否启用日志，默认true
   level: "INFO"              # 日志级别：DEBUG, INFO, WARNING, ERROR
-  file: "/path/to/log/ftp_transfer.log"  # 日志文件路径
-  rotation: "1 week"         # 日志轮转策略
-  retention: "1 month"       # 日志保留时间
-  compression: "gz"          # 压缩格式
+  file: "/path/to/ftp_transfer.log"  # 日志文件路径
 ```
 
 ### 邮件通知配置
 ```yaml
 email:
-  enable: false                  # 是否启用邮件通知
+  enabled: false                  # 是否启用邮件通知，默认false
   smtp_server: "smtp.example.com"  # SMTP服务器地址
   smtp_port: 587                 # SMTP服务器端口
-  username: "email@example.com"   # 邮箱用户名
-  password: "password"            # 邮箱密码
-  use_tls: true                  # 是否使用TLS加密
-  from_email: "email@example.com" # 发件人邮箱
-  to_emails: ["recipient@example.com"]  # 收件人邮箱列表
-  subject: "FTP文件传输结果通知"     # 邮件主题
+  use_tls: true                  # 是否使用TLS，默认true
+  username: "email@example.com"   # 发件人邮箱
+  password: "email_password"      # 发件人密码或授权码
+  from_address: "email@example.com" # 发件人地址
+  to_address: "recipient@example.com"  # 收件人地址
+  subject: "FTP/SFTP传输任务完成通知"  # 邮件主题
+  failure_threshold: 3           # 失败文件数量阈值，超过此值发送警告邮件
 ```
 
 ## 邮件通知场景
@@ -195,11 +244,14 @@ crontab -e
 
 ## 注意事项
 
-1. 确保FTP服务器的连接信息正确无误
+1. 确保FTP/SFTP服务器的连接信息正确无误
 2. 确保目标目录和归档目录存在且具有写入权限
-3. 对于大批量文件传输，建议适当调整`chunk_size`和`timeout`参数
-4. 在生产环境中使用时，建议启用日志轮转和压缩功能
+3. 对于大批量文件传输，建议根据网络情况调整超时设置
+4. 在生产环境中使用时，建议启用日志功能以便追踪问题
 5. 对于重要任务，建议启用邮件通知功能以便及时了解任务执行情况
+6. 使用SFTP协议时，确保私钥文件权限正确（推荐600权限）
+7. 对于文件存在处理策略，建议根据实际业务需求选择合适的选项
+8. 在跨时区环境中使用时，注意文件时间戳的处理可能会有差异
 
 ## 跨平台兼容性
 
