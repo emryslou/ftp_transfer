@@ -6,8 +6,10 @@ from typing import List, Dict, Optional, Union
 import logging
 import paramiko  # 新增：导入paramiko库以支持SFTP
 import datetime  # 新增：导入datetime库以支持时间处理
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
+zone_info = ZoneInfo("Asia/Shanghai")
 
 def connect_ftp(
     host: str, 
@@ -418,6 +420,8 @@ def get_file_modification_time(ftp: ftplib.FTP, directory: str, filename: str) -
     :param filename: 文件名
     :return: 文件的修改时间，如果失败则返回None
     """
+    result = None
+    original_dir = None
     try:
         original_dir = ftp.pwd()
         ftp.cwd(directory)
@@ -437,14 +441,119 @@ def get_file_modification_time(ftp: ftplib.FTP, directory: str, filename: str) -
                 minute = int(timestamp_str[10:12])
                 second = int(timestamp_str[12:14])
                 
-                return datetime.datetime(year, month, day, hour, minute, second)
+                result = datetime.datetime(year, month, day, hour, minute, second, tzinfo=zone_info)
         except ftplib.error_perm:
             logger.warning(f"无法获取文件 {filename} 的修改时间，服务器不支持MDTM命令")
-        
-        ftp.cwd(original_dir)
-        return None
     except Exception as e:
         logger.error(f"获取文件修改时间时出错: {str(e)}")
+        logger.debug(traceback.format_exc())
+    finally:
+        # 确保在所有路径中都能回到原始目录
+        if original_dir:
+            try:
+                ftp.cwd(original_dir)
+            except Exception:
+                # 如果回到原始目录失败，记录警告但不影响函数结果
+                logger.warning(f"无法回到原始目录 {original_dir}")
+        return result
+
+def get_file_creation_time(ftp: ftplib.FTP, directory: str, filename: str) -> Optional[datetime.datetime]:
+    """
+    获取FTP服务器上文件的创建时间
+    
+    注意：标准FTP协议没有直接获取文件创建时间的命令。此函数尝试通过多种方式获取：
+    1. 首先尝试使用MLST命令（如果服务器支持）
+    2. 然后尝试使用STAT命令解析输出
+    3. 如果都不可用，将返回修改时间作为备选
+    
+    :param ftp: FTP连接对象
+    :param directory: 目录路径
+    :param filename: 文件名
+    :return: 文件的创建时间，如果失败则返回None
+    """
+    try:
+        original_dir = ftp.pwd()
+        ftp.cwd(directory)
+        
+        # 方法1: 尝试使用MLST命令获取文件创建时间（如果服务器支持）
+        try:
+            # 发送MLST命令，响应通常包含创建时间信息
+            mlst_response = ftp.sendcmd(f'MLST {filename}')
+            
+            # 解析MLST响应，寻找创建时间字段
+            # 响应格式可能类似于: 250-Start of list for filename
+            #                       modify=20230101000000;create=20221231000000;... filename
+            #                       250 End of list
+            
+            for line in mlst_response.split('\n'):
+                line = line.strip()
+                # 查找包含create=的行
+                if 'create=' in line:
+                    # 提取创建时间信息
+                    create_time_str = None
+                    parts = line.split(';')
+                    for part in parts:
+                        if part.startswith('create='):
+                            create_time_str = part[7:21]  # 提取时间戳部分 YYYYMMDDHHMMSS
+                            break
+                    
+                    if create_time_str:
+                        # 解析时间戳
+                        year = int(create_time_str[0:4])
+                        month = int(create_time_str[4:6])
+                        day = int(create_time_str[6:8])
+                        hour = int(create_time_str[8:10])
+                        minute = int(create_time_str[10:12])
+                        second = int(create_time_str[12:14])
+                        
+                        ftp.cwd(original_dir)
+                        return datetime.datetime(year, month, day, hour, minute, second, tzinfo=zone_info)
+        except ftplib.error_perm:
+            logger.warning(f"无法使用MLST命令获取文件 {filename} 的创建时间，服务器可能不支持此命令")
+        
+        # 方法2: 尝试使用STAT命令获取信息
+        try:
+            # 发送STAT命令获取文件状态
+            stat_lines = []
+            ftp.retrlines(f'STAT {filename}', stat_lines.append)
+            
+            # 解析STAT响应，寻找可能包含创建时间的行
+            # 注意：STAT输出格式因服务器而异，这里只尝试基本解析
+            for line in stat_lines:
+                # 例如: "Size: 1024       Created: 01-Jan-2023 12:00:00"
+                if 'Created:' in line or '创建时间:' in line:
+                    # 尝试从行中提取日期时间信息
+                    try:
+                        # 假设格式为 "01-Jan-2023 12:00:00"
+                        time_str = line.split('Created:')[-1].strip() if 'Created:' in line else line.split('创建时间:')[-1].strip()
+                        # 尝试解析常见的日期格式
+                        try:
+                            # 格式: 01-Jan-2023 12:00:00
+                            dt = datetime.datetime.strptime(time_str.split()[0], '%d-%b-%Y')
+                            time_part = time_str.split()[1].split(':')
+                            hour = int(time_part[0])
+                            minute = int(time_part[1])
+                            second = int(time_part[2]) if len(time_part) > 2 else 0
+                            result = datetime.datetime(dt.year, dt.month, dt.day, hour, minute, second, tzinfo=zone_info)
+                            ftp.cwd(original_dir)
+                            return result
+                        except ValueError:
+                            # 尝试其他格式
+                            pass
+                    except Exception:
+                        # 解析失败，继续尝试
+                        continue
+        except ftplib.error_perm:
+            logger.warning(f"无法使用STAT命令获取文件 {filename} 的详细信息")
+        
+        # 方法3: 如果无法获取创建时间，返回修改时间作为备选
+        logger.info(f"无法直接获取文件 {filename} 的创建时间，返回修改时间作为备选")
+        mod_time = get_file_modification_time(ftp, '.', filename)  # 使用当前目录('.')因为我们已经切换到了正确目录
+        
+        ftp.cwd(original_dir)
+        return mod_time
+    except Exception as e:
+        logger.error(f"获取文件创建时间时出错: {str(e)}")
         logger.debug(traceback.format_exc())
         return None
 
@@ -465,8 +574,8 @@ def get_sftp_file_info(sftp: paramiko.SFTPClient, directory: str, filename: str)
         file_info = {
             'filename': filename,
             'size': stat.st_size,
-            'modified_time': datetime.datetime.fromtimestamp(stat.st_mtime),
-            'created_time': datetime.datetime.fromtimestamp(stat.st_ctime) if hasattr(stat, 'st_ctime') else None
+            'modified_time': datetime.datetime.fromtimestamp(stat.st_mtime, tz=zone_info),
+            'created_time': datetime.datetime.fromtimestamp(stat.st_ctime, tz=zone_info) if hasattr(stat, 'st_ctime') else None
         }
         
         return file_info

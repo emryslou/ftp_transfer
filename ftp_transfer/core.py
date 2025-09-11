@@ -2,7 +2,7 @@ import os
 import sys
 import traceback
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import ftplib  # 新增：导入ftplib模块
 import re  # 新增：导入re库以支持正则表达式匹配
 from typing import List, Tuple, Dict, Optional, Any
@@ -27,7 +27,9 @@ from .ftp_operations import (
     sftp_file_exists,
     close_sftp,
     get_file_modification_time,  # 新增：导入获取文件修改时间的函数
-    get_sftp_file_info  # 新增：导入获取SFTP文件信息的函数
+    get_file_creation_time,  # 新增：导入获取文件创建时间的函数
+    get_sftp_file_info,  # 新增：导入获取SFTP文件信息的函数
+    zone_info
 )
 from . import __version__, __author__, __email__
 
@@ -197,12 +199,28 @@ class FTPTransfer:
                     try:
                         time_value_str = file_filter.get('time_value', '')
                         time_type = file_filter.get('time_type', 'since')
+                        logger.info(f"文件过滤规则: 类型={filter_type}, 值={time_value_str}, 类型={time_type}")
                         
                         # 解析时间值
-                        if ' ' in time_value_str and ':' in time_value_str:
-                            filter_time = datetime.strptime(time_value_str, '%Y-%m-%d %H:%M:%S')
+                        if time_value_str == 'current_day':
+                            filter_time = datetime.now(tz=zone_info).replace(hour=0, minute=0, second=0, microsecond=0)
+                        elif time_value_str == 'current_time':
+                            filter_time = datetime.now(microsecond=0, tz=zone_info)
+                        elif time_value_str == 'current_hour':
+                            filter_time = datetime.now(tz=zone_info).replace(minute=0, second=0, microsecond=0)
+                        elif str(time_value_str).startswith('days_before_'):
+                            days_before = int(time_value_str[len('days_before_'):])
+                            filter_time = datetime.now(tz=zone_info).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_before)
+                        elif str(time_value_str).startswith('hours_before_'):
+                            hours_before = int(time_value_str[len('hours_before_'):])
+                            filter_time = datetime.now(tz=zone_info).replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours_before)
+                        elif str(time_value_str).startswith('minutes_before_'):
+                            minutes_before = int(time_value_str[len('minutes_before_'):])
+                            filter_time = datetime.now(tz=zone_info).replace(second=0, microsecond=0) - timedelta(minutes=minutes_before)
+                        elif ' ' in time_value_str and ':' in time_value_str:
+                            filter_time = datetime.strptime(time_value_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=zone_info)
                         else:
-                            filter_time = datetime.strptime(time_value_str, '%Y-%m-%d')
+                            filter_time = datetime.strptime(time_value_str, '%Y-%m-%d').replace(tzinfo=zone_info)
                         
                         # 获取文件时间
                         file_time = None
@@ -216,9 +234,12 @@ class FTPTransfer:
                         elif not self.source_use_sftp and source_conn:
                             if filter_type == 'modification_time':
                                 file_time = get_file_modification_time(source_conn, self.source_dir, filename)
+                            elif filter_type == 'creation_time':
+                                file_time = get_file_creation_time(source_conn, self.source_dir, filename)
                         
                         # 比较时间
                         if file_time:
+                            logger.info(f"文件 {filename} 的时间为: {file_time} {filter_time} {time_type}")
                             if time_type == 'since' and file_time >= filter_time:
                                 filtered_files.append(filename)
                             elif time_type == 'before' and file_time <= filter_time:

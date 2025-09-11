@@ -8,17 +8,24 @@ source:
   user: "NasSrv" # 用户名
   password: "1" # 密码
   directory: "/demo" # 目录
+  enable_backup: false # 是否启用备份
   backup_directory: /backup # 备份目录
   encoding: "gb2312" # 编码
 
+  file_filter:
+    type: "modification_time" # 文件过滤类型，可选值：all(全部文件), pattern(按字符匹配), extension(按后缀匹配), creation_time(按创建时间), modification_time(按修改时间)
+    time_value: "current_hour" # 时间值，格式：YYYY-MM-DD HH:MM:SS, current_day -- 当天, current_time -- 当前时间, current_hour -- 当前小时, days_before_{n} -- 前n天, hours_before_{n} -- 前n小时, minutes_before_{n} -- 前n分钟
+    time_type: "before" # 时间类型，可选值：since: file_time > time_value, before: file_time < time_value
+
 # 目标FTP服务器信息
 destination:
-  host: "192.168.1.30" # 主机
+  host: "192.168.1.25" # 主机
   port: 2121  # FTP端口，默认21
   user: "demo" # 用户名
   password: "1" # 密码
   directory: "/dest" # 目录
   encoding: "utf-8" # 编码
+  file_exists_strategy: "skip" # 文件存在策略，可选值：overwrite(覆盖), skip(跳过), rename(重命名)
 
 # 日志配置
 log:
