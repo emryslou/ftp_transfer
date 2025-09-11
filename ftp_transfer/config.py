@@ -105,14 +105,14 @@ def server_config(_config: dict|None = None, backup: bool = True) -> dict:
 
     # 如果使用SFTP，询问密钥文件和密码
     if default_config['use_sftp']:
-        default_config['password'] = input("密码 (按Enter键如果不设置密码，使用密钥认证): ") or None
+        default_config['password'] = getpass.getpass("密码 (按Enter键如果不设置密码，使用密钥认证): ") or None
         default_config['port'] = int(input("端口 (默认: 22): ") or 22)
         if not default_config['password']:
             default_config['key_file'] = input("私钥文件路径 (可选，按Enter跳过): ") or None
             if not default_config['key_file']:
-                default_config['passphrase'] = input("私钥密码 (可选，按Enter跳过): ") or None
+                default_config['passphrase'] = getpass.getpass("私钥密码 (可选，按Enter跳过): ") or None
     else:
-        default_config['password'] = input("密码: ") or None
+        default_config['password'] = getpass.getpass("密码: ") or None
         default_config['use_ftps'] = input("是否使用FTPS? (y/n, 默认n): ").lower() == 'y'
         default_config['port'] = int(input("端口 (默认: FTP=21, FTPS=990)") or (990 if default_config['use_ftps'] else 21))
         default_config['tls_implicit'] = input("是否使用隐式TLS? (y/n, 默认n): ").lower() == 'y'
@@ -169,7 +169,7 @@ def update_server_config(server_config: dict, backup: bool = True) -> dict:
     
     # 询问是否修改密码
     if input("是否修改密码? (y/n, 默认n): ").lower() == 'y':
-        updated_config['password'] = input("新密码 (按Enter键如果不设置密码，使用密钥认证): ")
+        updated_config['password'] = getpass.getpass("新密码 (按Enter键如果不设置密码，使用密钥认证): ")
     
     print(f"当前目录: {updated_config['directory']}")
     updated_config['directory'] = input("新目录 (按Enter保持当前): ") or updated_config['directory']
@@ -217,7 +217,7 @@ def update_server_config(server_config: dict, backup: bool = True) -> dict:
         
         # 询问是否修改私钥密码
         if input("是否修改私钥密码? (y/n, 默认n): ").lower() == 'y':
-            updated_config['passphrase'] = input("新私钥密码 (按Enter键如果不设置): ") or None
+            updated_config['passphrase'] = getpass.getpass("新私钥密码 (按Enter键如果不设置): ") or None
     
     return updated_config
 
@@ -373,7 +373,7 @@ def update_email_config(email_config: dict) -> dict:
             
             # 询问是否修改密码
             if input("是否修改密码? (y/n, 默认n): ").lower() == 'y':
-                updated_config['password'] = input("新密码或授权码: ")
+                updated_config['password'] = getpass.getpass("新密码或授权码: ")
             
             print(f"当前发件人地址: {updated_config.get('from_address', '')}")
             updated_config['from_address'] = input("新发件人地址: ") or updated_config.get('from_address', '')
@@ -464,7 +464,7 @@ def create_config(config_file_path: str) -> None:
             email_config['smtp_port'] = int(input("SMTP服务器端口 (默认: 587): ") or 587)
             email_config['use_tls'] = input("是否使用TLS? (y/n, 默认y): ").lower() != 'n'
             email_config['username'] = input("发件人邮箱: ")
-            email_config['password'] = input("发件人密码或授权码: ")
+            email_config['password'] = getpass.getpass("发件人密码或授权码: ")
             email_config['from_address'] = input("发件人地址 (默认与用户名相同): ") or email_config['username']
             email_config['to_address'] = input("收件人地址: ")
             email_config['subject'] = input("邮件主题 (默认: FTP/SFTP传输任务完成通知): ") or "FTP/SFTP传输任务完成通知"
